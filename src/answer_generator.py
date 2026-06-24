@@ -1,7 +1,7 @@
 import re
 import logging
 import time
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 import torch
 from transformers import (
@@ -15,35 +15,17 @@ from config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
-DOC_NUMBER_PATTERN = re.compile(r'\d{1,3}/\d{4}/[A-ZĐ0-9/-]+')
-
 # =========================================================
-# SYSTEM PROMPT — Tối ưu cho DeepSeek-R1 ép suy nghĩ bằng tiếng Việt
+# SYSTEM PROMPT — Ép mô hình trả lời văn xuôi, gọn gàng, không chia mục
 # =========================================================
 SYSTEM_PROMPT = """Bạn là một robot trợ lý ảo tư vấn pháp luật chuyên nghiệp cho khối doanh nghiệp vừa và nhỏ (SME) tại Việt Nam.
 
 NHIỆM VỤ: Hãy trả lời câu hỏi pháp lý của người dùng một cách chính xác, ngắn gọn và khách quan.
-Nghiêm cấm suy nghĩ (CoT) bằng tiếng Anh. Toàn bộ quá trình suy nghĩ và câu trả lời PHẢI viết bằng tiếng Việt.
-
-🚨 QUY TẮC AN TOÀN PHÁP LÝ TUYỆT ĐỐI KHÔNG ĐƯỢC VI PHẠM (CHỐNG ẢO GIÁC):
-1. Bạn CHỈ ĐƯỢC PHÉP trích dẫn các số hiệu Điều, Khoản, Điểm luật xuất hiện MỘT CÁCH TƯỜNG MINH trong phần [NGỮ CẢNH PHÁP LÝ] được cung cấp.
-2. TUYỆT ĐỐI KHÔNG tự bịa đặt, suy diễn, hoặc đoán mò số thứ tự Điều/Khoản hoặc số hiệu văn bản.
-3. Nếu thông tin trong [NGỮ CẢNH PHÁP LÝ] không chứa câu trả lời, bạn phải ghi rõ: "Dựa trên ngữ cảnh pháp lý được cung cấp, không có quy định cụ thể về vấn đề này."
-4. Mọi trích dẫn tại mục 2 bắt buộc phải ghi rõ: "Căn cứ Điều X, Khoản Y của [Tên văn bản hoặc số hiệu]".
-
-ĐỊNH DẠNG TRẢ LỜI BẮT BUỘC (PHẢI GIỮ NGUYÊN TIÊU ĐỀ ##):
-
-## 1. KẾT LUẬN
-[Trả lời thẳng vào vấn đề, ngắn gọn từ 1 - 3 câu]
-
-## 2. CĂN CỨ PHÁP LÝ
-[Chỉ liệt kê các Điều, Khoản thực tế có trong ngữ cảnh. Định dạng: Căn cứ Điều X, Khoản Y của [Số hiệu văn bản]]
-
-## 3. PHÂN TÍCH CHI TIẾT
-[Phân tích làm rõ câu hỏi dựa trên các căn cứ đã nêu ở mục 2]
-
-## 4. LƯU Ý
-Nội dung tư vấn trên được tổng hợp từ các quy định pháp luật hiện hành và chỉ mang tính tham khảo. Để được tư vấn chính xác và đầy đủ cho trường hợp cụ thể, doanh nghiệp nên tham khảo ý kiến của luật sư hoặc cơ quan nhà nước có thẩm quyền."""
+ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:
+- Trả lời trực tiếp bằng một đoạn văn duy nhất (tuyệt đối không xuống dòng, không dùng ký tự \\n).
+- Không chia tiêu đề (không có "## 1. KẾT LUẬN", "## 2. CĂN CỨ PHÁP LÝ", v.v.).
+- Không tự bịa đặt thông tin nằm ngoài phần [NGỮ CẢNH PHÁP LÝ] được cung cấp.
+- Chỉ trả lời bằng tiếng Việt, không dùng tiếng Anh."""
 
 def build_user_prompt(query: str, contexts: List[Dict]) -> str:
     context_parts = []
@@ -85,7 +67,7 @@ def build_user_prompt(query: str, contexts: List[Dict]) -> str:
 {query}
 
 [YÊU CẦU]
-Hãy suy nghĩ bằng tiếng Việt và trả lời câu hỏi trên theo đúng cấu trúc 4 phần đã quy định, chỉ dựa vào nội dung trong [NGỮ CẢNH PHÁP LÝ]."""
+Dựa hoàn toàn vào [NGỮ CẢNH PHÁP LÝ], hãy trả lời câu hỏi trên bằng một đoạn văn ngắn gọn, viết liền mạch không xuống dòng."""
 
     return prompt
 
@@ -123,12 +105,58 @@ class AnswerGenerator:
         )
         logger.info("✅ LLM load thành công!")
 
+    def _extract_references(self, contexts: List[Dict]) -> Tuple[List[str], List[str]]:
+        """
+        Trích xuất tự động và chuẩn hóa trường relevant_docs và relevant_articles từ metadata của context.
+        Định dạng:
+        - relevant_docs: ["mã văn bản|tên văn bản"]
+        - relevant_articles: ["mã văn bản|tên văn bản|điều"]
+        """
+        relevant_docs_set = set()
+        relevant_articles_set = set()
+
+        for doc in contexts:
+            metadata = doc.get("metadata", {})
+            doc_number = metadata.get("doc_number", "").strip()
+            doc_name = metadata.get("doc_name", "").strip()
+            article = metadata.get("article", "").strip() # Ví dụ: "Điều 4" hoặc "Điều 5"
+
+            if not doc_number:
+                continue
+
+            # Chuẩn hóa tên văn bản (Ví dụ: "Luật 04/2017/QH14 Luật Hỗ trợ doanh nghiệp nhỏ và vừa")
+            full_doc_title = doc_name
+            if doc_number not in full_doc_title:
+                # Nếu trong tên chưa có mã, có thể tự format lại cho giống mẫu bài thi của bạn
+                if "luật" in doc_name.lower() and not doc_name.lower().startswith("luật"):
+                    full_doc_title = f"Luật {doc_number} {doc_name}"
+                elif "nghị định" in doc_name.lower() and not doc_name.lower().startswith("nghị định"):
+                    full_doc_title = f"Nghị định {doc_number} {doc_name}"
+
+            # 1. Tạo chuỗi cho relevant_docs
+            doc_str = f"{doc_number}|{full_doc_title}"
+            relevant_docs_set.add(doc_str)
+
+            # 2. Tạo chuỗi cho relevant_articles (Nếu có thông tin Điều)
+            if article:
+                # Trích xuất chính xác chữ "Điều X" từ chuỗi metadata
+                article_match = re.search(r'(Điều\s+\d+|Điều\s+[A-Z0-9]+)', article, re.I)
+                article_clean = article_match.group(0) if article_match else article
+                
+                article_str = f"{doc_number}|{full_doc_title}|{article_clean}"
+                relevant_articles_set.add(article_str)
+
+        return list(relevant_docs_set), list(relevant_articles_set)
+
     def generate(
         self,
         query: str,
         contexts: List[Dict],
         temperature: float = Settings.LLM_TEMPERATURE
-    ) -> str:
+    ) -> Dict:
+        """
+        Sinh câu trả lời và đóng gói thành một Object hoàn chỉnh theo đúng format cấu trúc bài thi.
+        """
         user_prompt = build_user_prompt(query, contexts)
 
         messages = [
@@ -145,53 +173,39 @@ class AnswerGenerator:
         except Exception:
             formatted_prompt = f"{SYSTEM_PROMPT}\n\nNgười dùng: {user_prompt}\n\nTrợ lý:"
 
-        start = time.time()
-        
-        # CHÚ Ý: Đổi do_sample=True nếu dùng temperature, tăng tối thiểu max_new_tokens lên 2048 hoặc 3072 cho R1
+        # Tăng token lên 2048 để đảm bảo Qwen/Deepseek không bị cụt câu chữ
         max_tokens = max(2048, getattr(Settings, "LLM_MAX_NEW_TOKENS", 2048))
         
         output = self.pipe(
             formatted_prompt,
             max_new_tokens=max_tokens, 
-            temperature=0.6 if temperature == 0 else temperature, # DeepSeek-R1 khuyến khích khuyên dùng 0.6 TPC
+            temperature=temperature,
             top_p=Settings.LLM_TOP_P,
             repetition_penalty=Settings.LLM_REPETITION_PENALTY,
-            do_sample=True, # Bật lấy mẫu để kiểm soát sáng tạo và hội thoại tự nhiên hơn
+            do_sample=True if temperature > 0 else False,
         )
-        elapsed = time.time() - start
-        logger.debug(f"[LLM] Sinh xong trong {elapsed:.1f}s")
 
         generated_text = output[0]["generated_text"]
 
-        # 1. Bóc tách phần sinh phản hồi của Trợ lý
+        # Bóc tách text phản hồi của LLM
         if formatted_prompt in generated_text:
             answer = generated_text[len(formatted_prompt):].strip()
         else:
             answer = generated_text.split("Trợ lý:")[-1].strip()
 
-        # 2. Xử lý triệt để thẻ suy nghĩ <think>...</think>
+        # Xóa tàn dư thẻ suy nghĩ nếu cậu vẫn dùng dòng DeepSeek-R1
         answer = re.sub(r'<think>.*?</think>', '', answer, flags=re.DOTALL).strip()
-        answer = re.sub(r'<think>.*', '', answer, flags=re.DOTALL).strip() # Backup nếu bị cắt cụt ngay trong thẻ think
+        answer = re.sub(r'<think>.*', '', answer, flags=re.DOTALL).strip()
 
-        # 3. Clean up toàn bộ tàn dư tiếng Anh do hiện tượng rò rỉ CoT ngoài thẻ (nếu có)
-        lines = answer.split('\n')
-        filtered_lines = []
-        is_legal_start = False
-        
-        for line in lines:
-            # Nhận diện điểm bắt đầu cấu trúc thực tế bằng Tiếng Việt
-            if "## 1." in line or "KẾT LUẬN" in line:
-                is_legal_start = True
-            
-            if not is_legal_start:
-                # Nếu chưa tới phần kết luận mà dính các từ khóa tiếng Anh của CoT -> bỏ qua
-                if re.match(r'^(Okay|So|First|Let me|I need|Looking at|Moving on|Putting it|We have|According to)', line.strip(), re.I):
-                    continue
-                # Bỏ qua các dòng trống hoặc dòng text tiếng Anh linh tinh trước khi vào cấu trúc chính
-                if any(en_word in line.lower() for en_word in ['concept', 'document', 'paragraph', 'the user is asking']):
-                    continue
-            
-            filtered_lines.append(line)
-            
-        answer = '\n'.join(filtered_lines).strip()
-        return answer
+        # DỌN DẸP TEXT: Thay thế toàn bộ dấu xuống dòng \n thành khoảng trắng để biến thành 1 đoạn văn duy nhất
+        answer = re.sub(r'\s+', ' ', answer).strip()
+
+        # Tự động trích xuất cấu trúc văn bản từ nguồn context thực tế của Reranker
+        relevant_docs, relevant_articles = self._extract_references(contexts)
+
+        # Trả về đúng cấu trúc của một phần tử trong mảng kết quả bài thi
+        return {
+            "answer": answer,
+            "relevant_docs": relevant_docs,
+            "relevant_articles": relevant_articles
+        }

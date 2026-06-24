@@ -160,7 +160,7 @@ def process_question(
     final_contexts = reranker.rerank(query, raw_candidates)
 
     # --------- GIAI ĐOẠN 4: ANSWER GENERATION ---------
-    answer = ""
+    llm_output = {}
     verify_passed = False
     verify_violations = []
     was_regenerated = False
@@ -168,10 +168,12 @@ def process_question(
     for attempt in range(Settings.LLM_MAX_RETRIES + 1):
         temp = Settings.LLM_TEMPERATURE if attempt == 0 else Settings.LLM_REGEN_TEMPERATURE
 
-        answer = generator.generate(query, final_contexts, temperature=temp)
+        # BÂY GIỜ: generator.generate() trả về một DICT {"answer": ..., "relevant_docs": ..., "relevant_articles": ...}
+        llm_output = generator.generate(query, final_contexts, temperature=temp)
+        answer_text = llm_output.get("answer", "")
 
         # --------- GIAI ĐOẠN 5: SELF-VERIFICATION ---------
-        verify_result = verifier.verify(answer, query, final_contexts)
+        verify_result = verifier.verify(answer_text, query, final_contexts)
         verify_violations = verify_result.violations
 
         if verify_result.passed:
@@ -193,14 +195,20 @@ def process_question(
                 was_regenerated = True
 
     # --------- GIAI ĐOẠN 6: POST-PROCESSING ---------
+    # Gửi text thuần vào post_processor để xử lý hậu kỳ (nếu cần)
     result = post_processor.process_single(
         item_id=item_id,
         query=query,
-        answer=answer,
+        answer=llm_output.get("answer", ""),
         context_docs=final_contexts
     )
 
-    # Log metrics
+    # ĐẢM BẢO CHUẨN ĐỊNH DẠNG BÀI THI:
+    # Ghi đè hoặc bổ sung trực tiếp 2 trường tham chiếu chuẩn hóa bằng ký tự gạch đứng `|` từ LLM Output
+    result["relevant_docs"] = llm_output.get("relevant_docs", [])
+    result["relevant_articles"] = llm_output.get("relevant_articles", [])
+
+    # Log metrics hệ thống
     evaluator.log_item(
         item_id=item_id,
         query=query,
@@ -209,13 +217,11 @@ def process_question(
         verify_passed=verify_passed,
         verify_violations=verify_violations,
         was_regenerated=was_regenerated,
-        answer_length=len(answer),
-        relevant_docs_count=len(result.get("relevant_docs", []))
+        answer_length=len(llm_output.get("answer", "")),
+        relevant_docs_count=len(result["relevant_docs"])
     )
 
     return result
-
-
 # =========================================================
 # MAIN
 # =========================================================
