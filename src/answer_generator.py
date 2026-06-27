@@ -92,7 +92,7 @@ class AnswerGenerator:
             Settings.LLM_MODEL_NAME,
             trust_remote_code=True
         )
-
+        
         # low_cpu_mem_usage=True: tránh nhân đôi RAM CPU khi nạp trọng số trước khi accelerate
         # phân rã (shard) mô hình ra cả 2 GPU T4 theo device_map="auto" trên Kaggle.
         self.model = AutoModelForCausalLM.from_pretrained(
