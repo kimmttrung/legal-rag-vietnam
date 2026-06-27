@@ -46,7 +46,7 @@ from config.settings import Settings
 from src.index_bm25 import BM25IndexBuilder
 from src.hybrid_retriever import HybridRetriever
 from src.reranker import LegalReranker
-from src.answer_generator import AnswerGenerator
+from src.answer_generator import AnswerGenerator, build_user_prompt, SYSTEM_PROMPT
 from src.self_verifier import SelfVerifier
 from src.post_processor import PostProcessor
 
@@ -192,6 +192,42 @@ def rerank_with_diagnostics(reranker: LegalReranker, query: str, candidates: Lis
     return {"scored": scored, "filtered": filtered, "final": final, "fallback_used": fallback_used}
 
 
+def reconstruct_prompt(generator: AnswerGenerator, query: str, contexts: List[Dict]) -> Dict:
+    """
+    Tái dựng CHÍNH XÁC prompt mà AnswerGenerator.generate() gửi vào LLM
+    (cùng build_user_prompt + apply_chat_template), để lưu lại phục vụ debug.
+    Prompt giống nhau giữa các lần retry vì context không đổi (chỉ temperature đổi).
+    """
+    user_prompt = build_user_prompt(query, contexts)
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
+    try:
+        formatted_prompt = generator.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+    except Exception:
+        formatted_prompt = f"{SYSTEM_PROMPT}\n\nNgười dùng: {user_prompt}\n\nTrợ lý:"
+
+    try:
+        token_count = len(generator.tokenizer(formatted_prompt)["input_ids"])
+    except Exception:
+        token_count = None
+
+    return {
+        "system_prompt": SYSTEM_PROMPT,
+        "user_prompt": user_prompt,
+        "formatted_prompt": formatted_prompt,
+        "user_prompt_char_len": len(user_prompt),
+        "formatted_prompt_char_len": len(formatted_prompt),
+        "prompt_token_count": token_count,
+        "max_context_chars": Settings.MAX_CONTEXT_CHARS,
+        "context_was_truncated": "...[cắt bớt]" in user_prompt,
+        "num_context_docs": len(contexts),
+    }
+
+
 def doc_snapshot(doc: Dict, text_len: int = 300) -> Dict:
     meta = doc.get("metadata", {})
     return {
@@ -270,6 +306,9 @@ def debug_process_question(
     }
 
     # --------- GIAI ĐOẠN 4 + 5: GENERATION + SELF-VERIFICATION (với retry) ---------
+    # Lưu lại CHÍNH XÁC prompt gửi vào LLM (trước khi gọi generate) để debug context.
+    prompt_info = reconstruct_prompt(generator, query, final_contexts)
+
     attempts = []
     llm_output: Dict = {}
     verify_passed = False
@@ -301,6 +340,7 @@ def debug_process_question(
             break
 
     record["generation"] = {
+        "prompt": prompt_info,
         "attempts": attempts,
         "was_regenerated": len(attempts) > 1,
         "final_answer": llm_output.get("answer", ""),
