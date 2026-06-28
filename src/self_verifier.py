@@ -93,8 +93,13 @@ class SelfVerifier:
         if not answer_articles:
             return True, []  # Không có tham chiếu → pass (sẽ bị Rule 5 bắt)
 
-        # Gộp toàn bộ text context
-        context_text = " ".join(doc.get("text", "") for doc in context_docs).lower()
+        # Gộp toàn bộ text context VÀ article_id trong metadata. Nhiều chunk có số Điều
+        # nằm ở metadata.article_id (vd "Điều 12") chứ KHÔNG nằm trong thân text — nếu chỉ
+        # đối chiếu text sẽ báo nhầm "ảo giác" cho câu trả lời đúng (false positive).
+        context_text = " ".join(
+            (doc.get("text", "") + " " + (doc.get("metadata", {}) or {}).get("article_id", ""))
+            for doc in context_docs
+        ).lower()
 
         hallucinated = []
         for art_ref in answer_articles:

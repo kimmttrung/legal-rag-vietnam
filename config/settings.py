@@ -16,7 +16,7 @@ class Settings:
     # =========================================================
     QDRANT_URL = os.getenv("QDRANT_URL", "")
     QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
-    COLLECTION_NAME = "vietnamese_laws"
+    COLLECTION_NAME = "law_2026"
     EMBEDDING_DIM = 1024  # Chiều vector của AITeamVN/Vietnamese_Embedding
 
     # =========================================================
@@ -73,4 +73,5 @@ class Settings:
     # SELF-VERIFICATION RULES
     # =========================================================
     MIN_ARTICLE_REFS = 1      # Bắt buộc câu trả lời phải có ít nhất 1 tham chiếu Điều X
-    MAX_CONTEXT_CHARS = 4000  # Giới hạn ký tự context nạp vào LLM (tránh vượt context window)
+    MAX_CONTEXT_CHARS = 9000  # Giới hạn ký tự context nạp vào LLM (Qwen2.5-7B context 32k token,
+                              # 9000 ký tự ~ 4-5k token, đủ chứa TOP_K_FINAL=7 chunk không bị cắt)
