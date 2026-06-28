@@ -143,7 +143,12 @@ class HybridRetriever:
 
             return [
                 {
-                    "id": str(p.id),
+                    # Dùng unique_article_id (== id corpus, vd "04/2017/QH14_Điều 12") làm khóa
+                    # thay cho point-id UUID của Qdrant, để RRF dedupe khớp với nhánh BM25/sparse
+                    # (cùng một Điều ở 2 nhánh được cộng điểm thay vì bị coi là 2 tài liệu khác nhau).
+                    "id": (p.payload.get("unique_article_id")
+                           or p.payload.get("chunk_id")
+                           or str(p.id)),
                     "text": p.payload.get("text", ""),
                     "dense_score": float(p.score if p.score else 0.0),
                     "metadata": self._normalize_payload(p.payload)

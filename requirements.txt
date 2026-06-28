@@ -16,5 +16,10 @@ python-dotenv>=1.0.0
 tqdm>=4.66.0
 numpy>=1.26.0
 
+# Ingest văn bản mới (tải + parse HTML từ thuvienphapluat / nguồn chính thức)
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
 # PyTorch (Kaggle đã cài sẵn, dòng này để local)
 # torch>=2.2.0
