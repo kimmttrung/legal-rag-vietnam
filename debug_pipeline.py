@@ -355,11 +355,13 @@ def debug_process_question(
     result = post_processor.process_single(
         item_id=item_id, query=query, answer=llm_output.get("answer", ""), context_docs=final_contexts
     )
-    result["relevant_docs"] = pipeline_main.merge_unique_preserve_order(
-        llm_output.get("relevant_docs", []), result.get("relevant_docs", [])
+    # Precision-first (khớp main.py): ưu tiên set chọn lọc của generator
+    # (top-N + GIAO với Điều LLM thực sự dẫn), chỉ dùng PostProcessor làm fallback.
+    result["relevant_docs"] = (
+        llm_output.get("relevant_docs") or result.get("relevant_docs", [])
     )
-    result["relevant_articles"] = pipeline_main.merge_unique_preserve_order(
-        llm_output.get("relevant_articles", []), result.get("relevant_articles", [])
+    result["relevant_articles"] = (
+        llm_output.get("relevant_articles") or result.get("relevant_articles", [])
     )
 
     final_doc_set = {parse_pipe_doc(d) for d in result["relevant_docs"]}

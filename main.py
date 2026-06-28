@@ -214,16 +214,16 @@ def process_question(
         context_docs=final_contexts
     )
 
-    # ĐẢM BẢO CHUẨN ĐỊNH DẠNG BÀI THI:
-    # Ưu tiên các Điều/Văn bản trích xuất chính xác từ metadata của chunk (generator,
-    # bám theo context Reranker giữ lại ở TOP_K_FINAL), sau đó MERGE thêm các tham chiếu
-    # mà PostProcessor quét được bằng Regex trực tiếp trên answer (bổ sung, không ghi đè)
-    # để không bỏ sót Điều nào LLM có nhắc tới mà không khớp 1:1 với context.
-    result["relevant_docs"] = merge_unique_preserve_order(
-        llm_output.get("relevant_docs", []), result.get("relevant_docs", [])
+    # ĐẢM BẢO CHUẨN ĐỊNH DẠNG BÀI THI (precision-first để tối ưu F2):
+    # Generator đã chọn lọc relevant_docs/relevant_articles theo hướng top-N + GIAO với các
+    # Điều mà LLM thực sự trích dẫn (xem AnswerGenerator._extract_references). Vì vậy KHÔNG
+    # merge toàn bộ tập Regex của PostProcessor (sẽ làm phình precision → tụt F2). Chỉ dùng
+    # PostProcessor làm FALLBACK khi generator không chọn được Điều/văn bản nào.
+    result["relevant_docs"] = (
+        llm_output.get("relevant_docs") or result.get("relevant_docs", [])
     )
-    result["relevant_articles"] = merge_unique_preserve_order(
-        llm_output.get("relevant_articles", []), result.get("relevant_articles", [])
+    result["relevant_articles"] = (
+        llm_output.get("relevant_articles") or result.get("relevant_articles", [])
     )
 
     # Log metrics hệ thống
