@@ -205,11 +205,12 @@ class PostProcessor:
         seen: Set[str] = set()
 
         for doc_number, art_ref in doc_article_pairs:
-            if doc_number:
-                canonical_doc = self._build_canonical_doc_string(doc_number)
-                full_ref = f"{canonical_doc}|{art_ref}"
-            else:
-                full_ref = art_ref
+            # Bỏ qua "Điều X" trần không gắn được số hiệu văn bản: chuỗi dạng "Điều 12"
+            # không khớp format BTC "<số hiệu>|<tên>|<Điều X>" nên chỉ là nhiễu, làm tụt precision.
+            if not doc_number:
+                continue
+            canonical_doc = self._build_canonical_doc_string(doc_number)
+            full_ref = f"{canonical_doc}|{art_ref}"
 
             if full_ref not in seen:
                 relevant_articles.append(full_ref)
