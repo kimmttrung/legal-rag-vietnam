@@ -41,7 +41,16 @@ class Settings:
     # =========================================================
     RERANKER_MODEL = "BAAI/bge-reranker-large"
     RERANKER_THRESHOLD = 0.30  # Ngưỡng tối thiểu để giữ văn bản (giảm xuống 0.30 để an toàn hơn)
-    TOP_K_FINAL = 7            # Số văn bản đưa vào LLM (7 để có đủ context)
+    TOP_K_FINAL = 6            # Số văn bản đưa vào LLM (5 để có đủ context)
+
+    # =========================================================
+    # GIỚI HẠN OUTPUT NỘP BÀI (relevant_docs / relevant_articles)
+    # F2 phạt precision nặng khi ground-truth mỗi câu chỉ 1-3 điều
+    # → KHÔNG dump cả TOP_K_FINAL chunk ra field nộp bài.
+    # =========================================================
+    RELEVANT_ARTICLES_MAX = 4   # Số Điều tối đa emit ra relevant_articles mỗi câu
+    RELEVANT_DOCS_MAX = 3       # Số văn bản tối đa emit ra relevant_docs mỗi câu
+    RELEVANT_FALLBACK_K = 2     # Khi LLM không dẫn được Điều nào khớp context → giữ top-K chunk rerank
 
     # =========================================================
     # LLM - DeepSeek-R1-Distill-Qwen-14B trên Kaggle
@@ -74,4 +83,4 @@ class Settings:
     # =========================================================
     MIN_ARTICLE_REFS = 1      # Bắt buộc câu trả lời phải có ít nhất 1 tham chiếu Điều X
     MAX_CONTEXT_CHARS = 12000  # Giới hạn ký tự context nạp vào LLM (Qwen2.5-7B context 32k token,
-                               # 12000 ký tự ~ 5-6k token, đủ chứa trọn TOP_K_FINAL=7 chunk không bị cắt)
+                               # 12000 ký tự ~ 5-6k token, đủ chứa trọn TOP_K_FINAL chunk không bị cắt)

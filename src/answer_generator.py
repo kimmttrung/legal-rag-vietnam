@@ -137,20 +137,44 @@ class AnswerGenerator:
             return f"{doc_number}|{fallback_title}"
         return f"{doc_number}|Văn bản {doc_number}"
 
-    def _extract_references(self, contexts: List[Dict]) -> Tuple[List[str], List[str]]:
+    # Regex bóc số Điều và số hiệu văn bản từ câu trả lời của LLM
+    _ARTICLE_NUM_RE = re.compile(r'Điều\s+(\d+)', re.IGNORECASE)
+    _DOC_NUM_RE = re.compile(r'\d{1,4}/\d{4}/[A-Za-zĐđ\-]+')
+
+    @staticmethod
+    def _article_number(article_id: str) -> str:
+        """Lấy số Điều thuần từ 'Điều 4' -> '4' để so khớp với citation trong câu trả lời."""
+        m = re.search(r'(\d+)', article_id or "")
+        return m.group(1) if m else ""
+
+    def _parse_answer_citations(self, answer_text: str) -> Tuple[set, set]:
+        """Bóc các số Điều và số hiệu văn bản mà LLM THỰC SỰ nhắc tới trong câu trả lời."""
+        art_nums = set(self._ARTICLE_NUM_RE.findall(answer_text or ""))
+        doc_nums = set(self._DOC_NUM_RE.findall(answer_text or ""))
+        return art_nums, doc_nums
+
+    def _extract_references(
+        self,
+        contexts: List[Dict],
+        answer_text: str = ""
+    ) -> Tuple[List[str], List[str]]:
         """
-        Trích xuất tự động và chuẩn hóa trường relevant_docs và relevant_articles
-        trực tiếp từ metadata của các chunk context (đã qua Reranker, TOP_K_FINAL),
-        ghép với law_manifest.json để đảm bảo tên văn bản theo đúng chuẩn BTC.
+        Trích relevant_docs / relevant_articles theo hướng TỐI ƯU F2 (precision-first):
+        - KHÔNG dump toàn bộ TOP_K_FINAL chunk (precision tụt vì ground-truth mỗi câu chỉ 1-3 điều).
+        - Ưu tiên phần GIAO giữa context (đã qua Reranker, sắp theo điểm) và các Điều/văn bản mà
+          LLM THỰC SỰ trích dẫn trong câu trả lời → vừa grounded vừa chính xác.
+        - Giới hạn top-N (Settings.RELEVANT_ARTICLES_MAX / RELEVANT_DOCS_MAX).
+        - Fallback: nếu LLM không dẫn được Điều nào khớp context → giữ top-K chunk rerank điểm cao nhất.
+        Yêu cầu: `contexts` giữ nguyên thứ tự rerank (điểm cao -> thấp).
         Định dạng:
         - relevant_docs: ["mã văn bản|tên văn bản"]
         - relevant_articles: ["mã văn bản|tên văn bản|Điều X"]
         """
-        relevant_docs: List[str] = []
-        relevant_articles: List[str] = []
-        seen_docs = set()
-        seen_articles = set()
+        cited_art_nums, cited_doc_nums = self._parse_answer_citations(answer_text)
 
+        # Xây danh sách ứng viên theo đúng thứ tự rerank; mỗi (văn bản, Điều) chỉ 1 lần
+        candidates: List[Dict] = []
+        seen_keys = set()
         for doc in contexts:
             metadata = doc.get("metadata", {})
             doc_number = metadata.get("doc_number", "").strip()
@@ -161,16 +185,53 @@ class AnswerGenerator:
                 continue
 
             canonical_doc = self._canonical_doc_string(doc_number, doc_title)
+            article_str = f"{canonical_doc}|{article_id}" if article_id else ""
+            key = article_str or canonical_doc
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
 
-            if canonical_doc not in seen_docs:
-                seen_docs.add(canonical_doc)
-                relevant_docs.append(canonical_doc)
+            candidates.append({
+                "canonical_doc": canonical_doc,
+                "doc_number": doc_number,
+                "article_id": article_id,
+                "article_str": article_str,
+                "art_num": self._article_number(article_id),
+            })
 
-            if article_id:
-                article_str = f"{canonical_doc}|{article_id}"
-                if article_str not in seen_articles:
-                    seen_articles.add(article_str)
-                    relevant_articles.append(article_str)
+        def is_cited(c: Dict) -> bool:
+            # Điều phải được LLM nhắc tới trong câu trả lời
+            if not c["art_num"] or c["art_num"] not in cited_art_nums:
+                return False
+            # Nếu LLM có nêu số hiệu văn bản, bắt khớp đúng văn bản để tránh nhầm
+            # 'Điều 4' giữa nhiều luật khác nhau cùng nằm trong context.
+            if cited_doc_nums:
+                return c["doc_number"] in cited_doc_nums
+            return True
+
+        # Lõi precision: các Điều LLM thực sự dẫn VÀ có trong context (giữ thứ tự rerank)
+        core = [c for c in candidates if c["article_str"] and is_cited(c)]
+
+        # Fallback recall: LLM không dẫn được Điều nào khớp context → giữ top-K rerank
+        if not core:
+            core = [c for c in candidates if c["article_str"]][:Settings.RELEVANT_FALLBACK_K]
+
+        selected = core[:Settings.RELEVANT_ARTICLES_MAX]
+        relevant_articles = [c["article_str"] for c in selected]
+
+        # relevant_docs bám theo các văn bản của Điều đã chọn (giữ thứ tự, loại trùng)
+        relevant_docs: List[str] = []
+        seen_docs = set()
+        for c in selected:
+            if c["canonical_doc"] not in seen_docs:
+                seen_docs.add(c["canonical_doc"])
+                relevant_docs.append(c["canonical_doc"])
+
+        # An toàn: nếu không chọn được Điều nào nhưng vẫn có văn bản trong context
+        if not relevant_docs and candidates:
+            relevant_docs = [candidates[0]["canonical_doc"]]
+
+        relevant_docs = relevant_docs[:Settings.RELEVANT_DOCS_MAX]
 
         return relevant_docs, relevant_articles
 
@@ -230,8 +291,9 @@ class AnswerGenerator:
         if answer:
             answer = answer[0].upper() + answer[1:]
 
-        # Tự động trích xuất cấu trúc văn bản từ nguồn context thực tế của Reranker
-        relevant_docs, relevant_articles = self._extract_references(contexts)
+        # Trích xuất tham chiếu: GIAO giữa context (Reranker) và các Điều LLM thực sự dẫn,
+        # giới hạn top-N để tối ưu F2 (xem _extract_references)
+        relevant_docs, relevant_articles = self._extract_references(contexts, answer)
 
         # Trả về đúng cấu trúc của một phần tử trong mảng kết quả bài thi
         return {
