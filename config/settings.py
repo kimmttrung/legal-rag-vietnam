@@ -73,5 +73,5 @@ class Settings:
     # SELF-VERIFICATION RULES
     # =========================================================
     MIN_ARTICLE_REFS = 1      # Bắt buộc câu trả lời phải có ít nhất 1 tham chiếu Điều X
-    MAX_CONTEXT_CHARS = 9000  # Giới hạn ký tự context nạp vào LLM (Qwen2.5-7B context 32k token,
-                              # 9000 ký tự ~ 4-5k token, đủ chứa TOP_K_FINAL=7 chunk không bị cắt)
+    MAX_CONTEXT_CHARS = 12000  # Giới hạn ký tự context nạp vào LLM (Qwen2.5-7B context 32k token,
+                               # 12000 ký tự ~ 5-6k token, đủ chứa trọn TOP_K_FINAL=7 chunk không bị cắt)
