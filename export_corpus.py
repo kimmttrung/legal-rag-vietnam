@@ -12,32 +12,43 @@ def export_from_qdrant():
     
     corpus = []
     # Dùng tính năng scroll để kéo toàn bộ data về (mỗi lần 1000 bản ghi)
-    records, next_page_id = client.scroll(
-        collection_name=Settings.COLLECTION_NAME,
-        limit=1000,
-        with_payload=True,
-        with_vectors=False # Không lấy vector để file nhẹ, chỉ lấy text/metadata
-    )
-    
-    while records:
-        for record in records:
-            payload = record.payload
-            corpus.append({
-                "id": str(record.id),
-                "text": payload.get("text", ""), # Trường chứa nội dung văn bản
-                "metadata": payload.get("metadata", {})
-            })
-        
-        if not next_page_id:
-            break
-            
-        records, next_page_id = client.scroll(
+    # scroll() trả về tuple (records, next_offset); truyền next_offset vào offset= cho trang kế.
+    next_offset = None
+    while True:
+        records, next_offset = client.scroll(
             collection_name=Settings.COLLECTION_NAME,
             limit=1000,
             with_payload=True,
-            with_vectors=False,
-            next_page_id=next_page_id
+            with_vectors=False,  # Không lấy vector để file nhẹ, chỉ lấy text/metadata
+            offset=next_offset,
         )
+
+        for record in records:
+            payload = record.payload or {}
+            # Giữ TOÀN BỘ metadata trong payload Qdrant (không lược bớt trường nào).
+            # Nếu payload đã có 'metadata' lồng (dict) thì giữ nguyên; nếu payload phẳng
+            # thì gom mọi trường ngoài 'text' vào metadata.
+            if isinstance(payload.get("metadata"), dict):
+                metadata = payload["metadata"]
+            else:
+                metadata = {k: v for k, v in payload.items() if k != "text"}
+
+            # id = unique_article_id để KHỚP với nhánh dense (HybridRetriever),
+            # đảm bảo RRF merge gộp trùng đúng giữa BM25 và Qdrant.
+            uid = (payload.get("unique_article_id")
+                   or metadata.get("unique_article_id")
+                   or payload.get("chunk_id")
+                   or metadata.get("chunk_id")
+                   or str(record.id))
+
+            corpus.append({
+                "id": uid,
+                "text": payload.get("text", ""),
+                "metadata": metadata,
+            })
+
+        if next_offset is None:
+            break
 
     # Ghi ra file data/corpus_clean.json
     os.makedirs("data", exist_ok=True)
