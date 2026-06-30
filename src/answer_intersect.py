@@ -19,7 +19,9 @@ from config.settings import Settings
 logger = logging.getLogger(__name__)
 
 _ARTICLE_NUM_RE = re.compile(r"[Đđ]iều\s+(\d+)")
-_DOC_NUM_RE = re.compile(r"\d{1,4}/\d{4}/[A-Za-zĐđ\-]+")
+# Số hiệu VBPL: phần đuôi gồm CHỮ + SỐ + gạch nối, vd "QH13", "NĐ-CP", "TT-BTC", "QĐ-TTg".
+# (Bản cũ thiếu \d ở char-class nên "91/2015/QH13" bị cắt còn "91/2015/QH" → so khớp doc luôn trượt.)
+_DOC_NUM_RE = re.compile(r"\d{1,4}/\d{4}/[A-Za-zĐđ0-9\-]+")
 
 
 def parse_citations(answer_text: str) -> Tuple[Set[str], Set[str]]:
@@ -32,6 +34,29 @@ def parse_citations(answer_text: str) -> Tuple[Set[str], Set[str]]:
 def _article_num(article_id: str) -> str:
     m = re.search(r"(\d+)", article_id or "")
     return m.group(1) if m else ""
+
+
+def _ctx_key(c: Dict) -> Tuple[str, str]:
+    """Khóa định danh 1 context (để khử trùng giữa intersect & union): (số hiệu, số Điều)."""
+    md = c.get("metadata", {})
+    return (md.get("doc_number", "").strip(), _article_num(md.get("article_id", "")))
+
+
+def _pure_intersect(answer_text: str, pool: List[Dict]) -> List[Dict]:
+    """GIAO thuần: các context trong pool mà LLM có trích Điều (KHÔNG fallback). Có thể rỗng."""
+    cited_arts, cited_docs = parse_citations(answer_text)
+
+    def is_cited(c: Dict) -> bool:
+        md = c.get("metadata", {})
+        anum = _article_num(md.get("article_id", ""))
+        if not anum or anum not in cited_arts:
+            return False
+        # Nếu answer có nêu số hiệu, bắt khớp đúng văn bản để tránh nhầm 'Điều X' giữa các luật
+        if cited_docs:
+            return md.get("doc_number", "").strip() in cited_docs
+        return True
+
+    return [c for c in pool if is_cited(c)]
 
 
 def intersect_select(
@@ -49,22 +74,46 @@ def intersect_select(
     if not pool:
         return []
 
-    cited_arts, cited_docs = parse_citations(answer_text)
-
-    def is_cited(c: Dict) -> bool:
-        md = c.get("metadata", {})
-        anum = _article_num(md.get("article_id", ""))
-        if not anum or anum not in cited_arts:
-            return False
-        # Nếu answer có nêu số hiệu, bắt khớp đúng văn bản để tránh nhầm 'Điều X' giữa các luật
-        if cited_docs:
-            return md.get("doc_number", "").strip() in cited_docs
-        return True
-
-    kept = [c for c in pool if is_cited(c)]
+    kept = _pure_intersect(answer_text, pool)
 
     if not kept:
         # LLM không trích được điều nào khớp pool -> giữ top theo rerank
         kept = pool[: max(1, Settings.RELEVANT_ARTICLES_MAX)]
 
     return kept[:max_out]
+
+
+def intersect_union_select(
+    answer_text: str,
+    ranked: List[Dict],
+    pool_k: int = 8,
+    union_topk: int = 2,
+    max_out: int = 5,
+) -> List[Dict]:
+    """
+    Luồng KẾT HỢP để đẩy RECALL (kéo F2 cao):
+        kết quả = [GIAO: điều LLM trích ∩ pool rerank]  ∪  [top-`union_topk` rerank]
+
+    - Phần GIAO bám đúng điều LLM thực sự dùng (precision cao).
+    - UNION thêm top-`union_topk` rerank để KHÔNG bỏ sót điều đúng mà LLM không nhắc (recall cao).
+    - Khử trùng theo (số hiệu, số Điều); ưu tiên top rerank trước (đáng tin nhất cho recall),
+      rồi tới các điều LLM trích thêm. Cắt còn tối đa `max_out`.
+    - Nếu LLM không trích được gì khớp pool -> kết quả ≈ top-`union_topk` rerank (giống luồng No-LLM).
+    """
+    pool = ranked[:pool_k]
+    if not pool:
+        return []
+
+    cited = _pure_intersect(answer_text, pool)          # có thể rỗng
+    top_rerank = ranked[: max(0, union_topk)]            # top-N rerank cho recall
+
+    out: List[Dict] = []
+    seen: Set[Tuple[str, str]] = set()
+    # top rerank trước để khi cắt max_out vẫn giữ phần đáng tin nhất cho recall
+    for c in top_rerank + cited:
+        k = _ctx_key(c)
+        if k[0] and k not in seen:   # bỏ qua context không có số hiệu
+            seen.add(k)
+            out.append(c)
+
+    return out[:max_out]
