@@ -87,33 +87,45 @@ def intersect_union_select(
     answer_text: str,
     ranked: List[Dict],
     pool_k: int = 8,
-    union_topk: int = 2,
+    min_keep: int = 2,
     max_out: int = 5,
 ) -> List[Dict]:
     """
-    Luồng KẾT HỢP để đẩy RECALL (kéo F2 cao):
-        kết quả = [GIAO: điều LLM trích ∩ pool rerank]  ∪  [top-`union_topk` rerank]
+    Luồng KẾT HỢP — ƯU TIÊN điều LLM trích, top rerank chỉ BÙ khi thiếu:
+        1) Lấy [GIAO: điều LLM trích ∩ pool rerank]  (ưu tiên hàng đầu, giữ thứ tự rerank).
+        2) NẾU số điều ở (1) < `min_keep` -> bù thêm top rerank (chưa có) cho ĐỦ `min_keep`.
+        3) Cắt còn tối đa `max_out`.
 
-    - Phần GIAO bám đúng điều LLM thực sự dùng (precision cao).
-    - UNION thêm top-`union_topk` rerank để KHÔNG bỏ sót điều đúng mà LLM không nhắc (recall cao).
-    - Khử trùng theo (số hiệu, số Điều); ưu tiên top rerank trước (đáng tin nhất cho recall),
-      rồi tới các điều LLM trích thêm. Cắt còn tối đa `max_out`.
-    - Nếu LLM không trích được gì khớp pool -> kết quả ≈ top-`union_topk` rerank (giống luồng No-LLM).
+    Ý nghĩa:
+    - LLM trích ĐỦ (>= min_keep điều grounded) -> CHỈ lấy điều LLM trích, rerank KHÔNG chen vào
+      (precision cao, không phình).
+    - LLM trích THIẾU (hoặc không khớp pool) -> rerank bù cho đủ min_keep (giữ recall, không rỗng).
+    - `min_keep` cũng đóng vai trò chống output rỗng: đặt >= 1 để luôn có ít nhất 1 điều.
     """
     pool = ranked[:pool_k]
     if not pool:
         return []
 
-    cited = _pure_intersect(answer_text, pool)          # có thể rỗng
-    top_rerank = ranked[: max(0, union_topk)]            # top-N rerank cho recall
+    cited = _pure_intersect(answer_text, pool)          # điều LLM trích (có thể rỗng)
 
     out: List[Dict] = []
     seen: Set[Tuple[str, str]] = set()
-    # top rerank trước để khi cắt max_out vẫn giữ phần đáng tin nhất cho recall
-    for c in top_rerank + cited:
+
+    # (1) Ưu tiên điều LLM trích trước
+    for c in cited:
         k = _ctx_key(c)
-        if k[0] and k not in seen:   # bỏ qua context không có số hiệu
+        if k[0] and k not in seen:
             seen.add(k)
             out.append(c)
+
+    # (2) Bù bằng top rerank CHỈ khi chưa đủ min_keep
+    if len(out) < min_keep:
+        for c in ranked:                                # duyệt theo thứ tự rerank (tốt -> kém)
+            k = _ctx_key(c)
+            if k[0] and k not in seen:
+                seen.add(k)
+                out.append(c)
+                if len(out) >= min_keep:
+                    break
 
     return out[:max_out]

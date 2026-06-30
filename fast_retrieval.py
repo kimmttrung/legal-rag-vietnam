@@ -37,7 +37,7 @@ from src.hybrid_retriever import HybridRetriever
 from src.reranker import LegalReranker
 from src.reference_extractor import load_manifest, extract_references_topn, extract_references_all
 from src.llm_selector import select_candidates
-from src.answer_intersect import intersect_select, intersect_union_select
+from src.answer_intersect import intersect_union_select
 
 
 # =========================================================
@@ -109,15 +109,13 @@ def main():
                     help="Số điều TỐI ĐA LLM được chọn (số lượng thực tế biến thiên 1..max-select)")
     ap.add_argument("--llm-answer", action="store_true",
                     help="Sinh answer THẬT rồi lấy GIAO citation∩pool rerank (answer≠'', còn ăn điểm QA)")
-    ap.add_argument("--union-topk", type=int, default=0,
-                    help="(Chỉ với --llm-answer) >0 = HỢP giao-citation với top-N rerank để đẩy recall/F2. "
-                         "0 = chỉ giao thuần (mặc định). Khuyến nghị 2-3.")
+    ap.add_argument("--min-articles", type=int, default=2,
+                    help="(Chỉ với --llm-answer) Số điều TỐI THIỂU muốn có: ưu tiên điều LLM trích, "
+                         "top rerank chỉ BÙ khi LLM trích chưa đủ. Mặc định 2. Đặt 1 để precision cao nhất.")
     args = ap.parse_args()
 
     if args.llm_answer:
-        mode = ("RETRIEVAL + RERANK + LLM-ANSWER (giao∪top%d rerank)" % args.union_topk
-                if args.union_topk > 0
-                else "RETRIEVAL + RERANK + LLM-ANSWER (giao citation∩pool)")
+        mode = "RETRIEVAL + RERANK + LLM-ANSWER (ưu tiên LLM, bù rerank đủ %d điều)" % args.min_articles
     elif args.llm_select:
         mode = "RETRIEVAL + RERANK + LLM-SELECT"
     else:
@@ -170,14 +168,11 @@ def main():
                 ranked = reranker.rerank(question, raw_candidates, top_k=max(args.pool_k, Settings.TOP_K_FINAL))
                 out = generator.generate(question, ranked)
                 answer_text = out.get("answer", "")
-                if args.union_topk > 0:
-                    # HỢP giao-citation ∪ top-N rerank để đẩy recall (F2 cao hơn)
-                    kept = intersect_union_select(
-                        answer_text, ranked,
-                        pool_k=args.pool_k, union_topk=args.union_topk, max_out=args.max_select,
-                    )
-                else:
-                    kept = intersect_select(answer_text, ranked, pool_k=args.pool_k, max_out=args.max_select)
+                # Ưu tiên điều LLM trích; top rerank chỉ bù khi chưa đủ --min-articles
+                kept = intersect_union_select(
+                    answer_text, ranked,
+                    pool_k=args.pool_k, min_keep=args.min_articles, max_out=args.max_select,
+                )
                 rel_docs, rel_articles = extract_references_all(kept, manifest)
             elif args.llm_select:
                 # rerank lấy pool lớn hơn rồi để LLM chọn lọc (số lượng biến thiên)
