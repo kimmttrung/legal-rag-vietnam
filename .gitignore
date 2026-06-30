@@ -15,4 +15,5 @@ debug_output/
 
 # Các file index lưu local (nếu có)
 *.pkl
+data/corpus_clean.json 
 CLAUDE.md
