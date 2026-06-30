@@ -50,9 +50,9 @@ def export_from_qdrant():
         if next_offset is None:
             break
 
-    # Ghi ra file data/corpus_clean.json
+    # Ghi ra file data/law_corpus_clean.json
     os.makedirs("data", exist_ok=True)
-    output_path = "data/corpus_clean.json"
+    output_path = "data/law_corpus_clean.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(corpus, f, ensure_ascii=False, indent=2)
         

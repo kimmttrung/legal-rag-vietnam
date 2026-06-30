@@ -80,8 +80,8 @@ Nơi khai báo trong mã nguồn: [`config/settings.py`](../config/settings.py)
 ### 2.4. Vector index — Qdrant Cloud collection `law_2026`
 - **Bản chất:** Không phải model — là **artifact dữ liệu tự tạo** (toàn bộ corpus đã embed bằng model 2.1).
 - **Thông số:** collection `law_2026`, vector 1024 chiều, ~28.000 đoạn (chunk) văn bản pháp lý.
-- **Chia sẻ:** Snapshot Qdrant (`.snapshot`) hoặc file `data/corpus_clean.json` (75MB) qua Google Drive/OneDrive — xem mục "Dữ liệu" trong README.
-- **Tái dựng:** Nếu có file gốc, dùng [`export_corpus.py`](../export_corpus.py) để export lại từ Qdrant; BM25 index dựng lại từ `corpus_clean.json` qua `src/index_bm25.py`.
+- **Chia sẻ:** Snapshot Qdrant (`.snapshot`) hoặc file `data/law_corpus_clean.json` (75MB) qua Google Drive/OneDrive — xem mục "Dữ liệu" trong README.
+- **Tái dựng:** Nếu có file gốc, dùng [`export_corpus.py`](../export_corpus.py) để export lại từ Qdrant; BM25 index dựng lại từ `law_corpus_clean.json` qua `src/index_bm25.py`.
 
 ---
 

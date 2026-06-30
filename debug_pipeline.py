@@ -14,8 +14,7 @@ So sánh với ground truth (nếu có) ở 3 mốc: sau Retrieval, sau Rerank, 
 
 Chạy (trên Kaggle GPU — script load model thật, không mock):
     python debug_pipeline.py \
-        --input data/R2AIStage1DATA_50.json \
-        --ground-truth data/ground_truth_50.json \
+        --input data/R2AIStage1DATA.json \
         --num-questions 50 \
         --output-dir debug_output
 """
@@ -516,8 +515,8 @@ def build_summary(records: List[Dict]) -> str:
 # =========================================================
 def main():
     parser = argparse.ArgumentParser(description="Debug pipeline — in/lưu kết quả từng giai đoạn")
-    parser.add_argument("--input", type=str, default="data/R2AIStage1DATA_50.json")
-    parser.add_argument("--ground-truth", type=str, default="data/ground_truth_50.json")
+    parser.add_argument("--input", type=str, default="data/R2AIStage1DATA.json")
+    parser.add_argument("--ground-truth", type=str, default="")
     parser.add_argument("--num-questions", type=int, default=50)
     parser.add_argument("--output-dir", type=str, default="debug_output")
     parser.add_argument("--debug", action="store_true")

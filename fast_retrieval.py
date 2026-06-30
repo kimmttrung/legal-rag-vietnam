@@ -60,12 +60,12 @@ def build_embedding_fn():
 
 
 def load_corpus() -> List[Dict]:
-    corpus_json = os.path.join(Settings.DATA_DIR, "corpus_clean.json")
+    corpus_json = os.path.join(Settings.DATA_DIR, "law_corpus_clean.json")
     if os.path.exists(corpus_json):
         logger.info(f"[Corpus] Load từ {corpus_json}")
         with open(corpus_json, "r", encoding="utf-8") as f:
             return json.load(f)
-    logger.warning("[Corpus] Không thấy corpus_clean.json — BM25 rỗng, chỉ Dense Search.")
+    logger.warning("[Corpus] Không thấy law_corpus_clean.json — BM25 rỗng, chỉ Dense Search.")
     return []
 
 

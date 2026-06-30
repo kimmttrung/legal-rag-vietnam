@@ -65,9 +65,9 @@ Hệ thống dùng **3 checkpoint pretrained công khai** (KHÔNG fine-tune) + *
 
 | File | Mô tả | Dung lượng |
 |------|-------|-----------|
-| `data/corpus_clean.json` | ~30k đoạn văn bản pháp lý đã chunk (`{id, text, metadata}`) — corpus cho BM25 & nguồn rerank | ~75 MB |
+| `data/law_corpus_clean.json` | ~30k đoạn văn bản pháp lý đã chunk (`{id, text, metadata}`) — corpus cho BM25 & nguồn rerank | ~75 MB |
 | `data/law_manifest.json` | Map số hiệu văn bản → metadata chuẩn BTC (dùng cho self-verify & chuẩn hóa output) | ~252 KB |
-| `data/bm25_corpus.pkl` | Index BM25 đã token hóa sẵn (tự sinh từ `corpus_clean.json` nếu chưa có) | sinh khi chạy |
+| `data/bm25_corpus.pkl` | Index BM25 đã token hóa sẵn (tự sinh từ `law_corpus_clean.json` nếu chưa có) | sinh khi chạy |
 | `data/R2AIStage1DATA.json` | Bộ câu hỏi chính thức (2000 câu) | ~520 KB |
 
 **Định dạng câu hỏi đầu vào** (JSON list):
@@ -76,12 +76,12 @@ Hệ thống dùng **3 checkpoint pretrained công khai** (KHÔNG fine-tune) + *
 ```
 
 **Vector index Qdrant:** Bản gốc nằm trên Qdrant Cloud (collection `law_2026`, 1024-dim).
-Nếu giám khảo không có quyền truy cập Qdrant của đội, có thể tái dựng từ `corpus_clean.json`
+Nếu giám khảo không có quyền truy cập Qdrant của đội, có thể tái dựng từ `law_corpus_clean.json`
 (BM25 chạy local; dense cần một Qdrant instance — xem mục 8).
 
 > **Link chia sẻ dữ liệu/checkpoint snapshot (Google Drive):**
 > [NEXTGEN-legal-rag-data](https://drive.google.com/drive/folders/1mDoUfFrl8k3HNN6xlKsZpGdklU_A0Ifk?usp=sharing)
-> (chứa `corpus_clean.json`, `law_manifest.json`, `R2AIStage1DATA.json` và snapshot Qdrant `law_2026`).
+> (chứa `law_corpus_clean.json`, `law_manifest.json`, `R2AIStage1DATA.json` và snapshot Qdrant `law_2026`).
 
 ---
 
@@ -173,10 +173,10 @@ python fast_retrieval.py \
     --llm-answer --pool-k 8 --max-select 5
 ```
 
-**Chạy thử nhanh 50 câu:**
+**Chạy thử nhanh 50 câu** (lấy 50 câu đầu từ file 2000 câu):
 ```bash
 python fast_retrieval.py \
-    --input data/R2AIStage1DATA_50.json \
+    --input data/R2AIStage1DATA.json \
     --output output/results_50.json \
     --llm-answer --pool-k 8 --max-select 5 --num-questions 50
 ```
@@ -212,14 +212,14 @@ File `results.json` gồm đúng **2000 bản ghi**, mỗi bản ghi:
 ## 8. (Tùy chọn) Tái dựng dữ liệu từ đầu
 
 ```bash
-# Export lại corpus từ Qdrant Cloud (cần .env hợp lệ) → data/corpus_clean.json
+# Export lại corpus từ Qdrant Cloud (cần .env hợp lệ) → data/law_corpus_clean.json
 python export_corpus.py
 
 # Dựng lại BM25 index → data/bm25_corpus.pkl
 python -m src.index_bm25
 ```
 > Phần **dense index** (Qdrant) được dựng sẵn từ trước bằng model embedding ở mục 3.
-> Để dựng lại hoàn toàn dense index trên một Qdrant mới, cần re-embed `corpus_clean.json`
+> Để dựng lại hoàn toàn dense index trên một Qdrant mới, cần re-embed `law_corpus_clean.json`
 > bằng `AITeamVN/Vietnamese_Embedding` và upsert vào collection `law_2026` (1024-dim, distance Cosine).
 
 ---
@@ -230,7 +230,7 @@ python -m src.index_bm25
 legal-rag-vietnam/
 ├── fast_retrieval.py        # Pipeline INTERSECT (điểm chạy chính khi nộp)
 ├── main.py                  # Pipeline đầy đủ (retrieve→rerank→generate→self-verify→package)
-├── export_corpus.py         # Export corpus từ Qdrant Cloud → data/corpus_clean.json
+├── export_corpus.py         # Export corpus từ Qdrant Cloud → data/law_corpus_clean.json
 ├── pipeline-intersect.ipynb # Notebook Kaggle chạy pipeline INTERSECT
 ├── requirements.txt         # Danh sách dependencies
 ├── config/
@@ -260,4 +260,4 @@ legal-rag-vietnam/
 | Kết nối Qdrant lỗi / rỗng | Kiểm tra `QDRANT_URL`, `QDRANT_API_KEY` trong `.env`; xác nhận collection `law_2026` tồn tại. |
 | Tải checkpoint chậm/lỗi | Lần đầu cần Internet; có thể tải trước bằng `huggingface-cli` (xem `docs/MODELS.md`). |
 | `bitsandbytes` lỗi trên Windows | Khuyến nghị chạy trên Kaggle/Linux; Windows cần bản `bitsandbytes` hỗ trợ CUDA tương ứng. |
-| BM25 index không có | Tự sinh từ `corpus_clean.json` ở lần chạy đầu; hoặc chạy `python -m src.index_bm25`. |
+| BM25 index không có | Tự sinh từ `law_corpus_clean.json` ở lần chạy đầu; hoặc chạy `python -m src.index_bm25`. |

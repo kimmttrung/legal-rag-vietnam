@@ -69,7 +69,7 @@ class HybridRetriever:
     @staticmethod
     def _normalize_payload(payload: Dict) -> Dict:
         """
-        Chuẩn hóa payload Qdrant về cùng cấu trúc metadata với corpus BM25 (corpus_clean.json):
+        Chuẩn hóa payload Qdrant về cùng cấu trúc metadata với corpus BM25 (law_corpus_clean.json):
         {"doc_number", "title", "article_id", "unique_article_id", "clause_num", "context"}.
         Payload thực tế trên Qdrant Cloud là field phẳng (doc_id, title, article_id, ...),
         không có wrapper "metadata" lồng bên trong.

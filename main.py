@@ -75,16 +75,16 @@ def build_embedding_fn():
 def load_corpus() -> List[Dict]:
     """
     Load corpus văn bản pháp lý đã chuẩn hóa từ Giai đoạn 0.
-    Tìm lần lượt: corpus_clean.json → bm25_corpus.pkl
+    Tìm lần lượt: law_corpus_clean.json → bm25_corpus.pkl
     """
-    corpus_json = os.path.join(Settings.DATA_DIR, "corpus_clean.json")
+    corpus_json = os.path.join(Settings.DATA_DIR, "law_corpus_clean.json")
     if os.path.exists(corpus_json):
         logger.info(f"[Corpus] Load từ {corpus_json}")
         with open(corpus_json, "r", encoding="utf-8") as f:
             return json.load(f)
 
     logger.warning(
-        "[Corpus] Không tìm thấy corpus_clean.json. "
+        "[Corpus] Không tìm thấy law_corpus_clean.json. "
         "BM25 sẽ chạy với corpus rỗng — chỉ dùng Dense Search."
     )
     return []

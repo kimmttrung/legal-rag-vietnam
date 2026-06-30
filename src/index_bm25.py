@@ -161,7 +161,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     # Giả sử bạn có file corpus đã chuẩn hóa
-    corpus_path = os.path.join(Settings.DATA_DIR, "corpus_clean.json")
+    corpus_path = os.path.join(Settings.DATA_DIR, "law_corpus_clean.json")
     if os.path.exists(corpus_path):
         with open(corpus_path, "r", encoding="utf-8") as f:
             corpus = json.load(f)
@@ -171,4 +171,4 @@ if __name__ == "__main__":
         print(f"Done! Index đã lưu tại {Settings.BM25_INDEX_PATH}")
     else:
         print(f"❌ Không tìm thấy corpus tại {corpus_path}")
-        print("Hãy chạy sau khi đã có file corpus_clean.json từ Giai đoạn 0.")
+        print("Hãy chạy sau khi đã có file law_corpus_clean.json từ Giai đoạn 0.")
