@@ -19,7 +19,7 @@ from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -57,19 +57,17 @@ class AskRequest(BaseModel):
 
 
 def _sse(event: str, data) -> str:
-    """Đóng gói một sự kiện SSE."""
-    payload = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
-    return f"event: {event}\ndata: {payload}\n\n"
+    """
+    Đóng gói một sự kiện SSE. LUÔN JSON-encode data (kể cả chuỗi token) để:
+      - phía client chỉ cần JSON.parse đồng nhất cho mọi sự kiện;
+      - ký tự xuống dòng trong token được escape (\\n) nên không phá khung SSE.
+    """
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @app.get("/health")
 def health():
     return {"status": "ok", "ready": _service is not None}
-
-
-@app.get("/")
-def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 
 @app.post("/ask")
@@ -114,6 +112,15 @@ def ask(req: AskRequest):
     )
 
 
-# Mount static (CSS/ảnh nếu có) — đặt sau các route để không nuốt "/".
-if os.path.isdir(STATIC_DIR):
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Phục vụ React build (Vite build -> app/static). Mount ở "/" với html=True để trả index.html
+# cho "/" và mọi route SPA; các route API (/ask, /health) đã khai báo phía trên nên được ưu tiên.
+# Đặt CUỐI FILE để không nuốt các route API.
+if os.path.isdir(STATIC_DIR) and os.path.exists(os.path.join(STATIC_DIR, "index.html")):
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="spa")
+else:
+    @app.get("/")
+    def _no_build():
+        return JSONResponse(
+            {"message": "Chưa có React build. Chạy `npm run build` trong web/ (hoặc build qua Docker)."},
+            status_code=200,
+        )

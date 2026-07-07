@@ -16,3 +16,7 @@ debug_output/
 # Các file index lưu local (nếu có)
 *.pkl
 CLAUDE.md
+# React build artifacts (built from web/ via Vite/Docker)
+app/static/
+web/node_modules/
+web/dist/

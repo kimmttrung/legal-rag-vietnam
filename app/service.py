@@ -86,16 +86,18 @@ def _norm_key(doc_number: str) -> str:
 class RagService:
     def __init__(self):
         logger.info("[RagService] Khởi tạo các thành phần nặng (một lần)...")
-        corpus = _load_corpus()
         bm25 = BM25IndexBuilder()
-        if os.path.exists(Settings.BM25_INDEX_PATH) and corpus:
+        if os.path.exists(Settings.BM25_INDEX_PATH):
+            # Đã có index → nạp thẳng, KHÔNG cần nạp corpus 137MB (tiết kiệm RAM + cold-start trên CPU/HF Spaces).
             bm25.load()
-        elif corpus:
-            bm25.build(corpus).save()
         else:
-            from rank_bm25 import BM25Okapi
-            bm25.documents = []
-            bm25.bm25 = BM25Okapi([[]])
+            corpus = _load_corpus()
+            if corpus:
+                bm25.build(corpus).save()
+            else:
+                from rank_bm25 import BM25Okapi
+                bm25.documents = []
+                bm25.bm25 = BM25Okapi([[]])
 
         embed_fn = _build_embedding_fn()
         self.retriever = HybridRetriever(bm25_builder=bm25, embedding_fn=embed_fn, llm_pipeline=None)
