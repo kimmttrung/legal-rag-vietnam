@@ -16,6 +16,11 @@ python-dotenv>=1.0.0
 tqdm>=4.66.0
 numpy>=1.26.0
 
+# Demo web app (app/) — LLM sinh câu trả lời gọi qua API hosted, không nạp model tại chỗ
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+openai>=1.30.0
+
 # Ingest văn bản mới (tải + parse HTML từ thuvienphapluat / nguồn chính thức)
 requests>=2.31.0
 beautifulsoup4>=4.12.0

@@ -78,6 +78,21 @@ class Settings:
     OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
     RESULTS_PATH = os.path.join(OUTPUT_DIR, "results.json")
     EVAL_REPORT_PATH = os.path.join(LOG_DIR, "evaluation_report.md")
+    DOC_URL_MAP_PATH = os.path.join(DATA_DIR, "doc_url_map.json")
+
+    # =========================================================
+    # DEMO WEB APP (app/) — LUỒNG RIÊNG, KHÔNG ảnh hưởng main.py / fast_retrieval.py
+    # LLM sinh câu trả lời gọi qua API hosted (OpenAI-compatible: Together/DeepInfra/Novita...)
+    # vì máy demo chỉ có CPU. Embedding + Reranker vẫn chạy local (GPU cloud).
+    # =========================================================
+    LLM_API_BASE_URL = os.getenv("LLM_API_BASE_URL", "https://api.together.xyz/v1")
+    LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+    LLM_API_MODEL = os.getenv("LLM_API_MODEL", "Qwen/Qwen2.5-7B-Instruct-Turbo")
+
+    # Số ứng viên (sau rerank) hiển thị làm citation trong app demo.
+    DEMO_RETRIEVE_POOL = 5
+    # Độ dài đoạn trích văn bản gốc hiển thị trong mỗi thẻ citation (ký tự).
+    DEMO_SNIPPET_CHARS = 400
 
     # =========================================================
     # SELF-VERIFICATION RULES
