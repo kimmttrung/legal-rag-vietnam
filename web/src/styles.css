@@ -34,8 +34,10 @@ body {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 24px; gap: 12px;
 }
-.brand { font-size: 22px; font-weight: 800; letter-spacing: 1px; color: var(--brand); }
+.brand { font-size: 22px; font-weight: 800; letter-spacing: 0.5px; color: var(--brand);
+  display: flex; align-items: baseline; gap: 10px; }
 .brand-x { color: var(--accent-2); }
+.brand-sub { font-size: 12px; font-weight: 500; letter-spacing: 0.3px; color: var(--muted); }
 .reopen {
   background: var(--panel); border: 1px solid var(--border); color: var(--ink);
   padding: 8px 14px; border-radius: 10px; cursor: pointer; font-size: 13px;
@@ -62,7 +64,8 @@ body {
   background: linear-gradient(140deg, #2a53c4, #6d9bff); color: #fff; font-size: 15px;
   box-shadow: 0 4px 14px rgba(60, 110, 240, 0.45);
 }
-.assistant-body { line-height: 1.75; font-size: 15.5px; max-width: 820px; }
+.assistant-col { max-width: 820px; }
+.assistant-body { line-height: 1.75; font-size: 15.5px; }
 .assistant-body.error { color: #ffb4b4; }
 .assistant-body p { margin: 0 0 12px; }
 .assistant-body p:last-child { margin-bottom: 0; }
@@ -83,6 +86,32 @@ body {
 @keyframes blink { 50% { opacity: 0; } }
 
 .status { max-width: 900px; margin: 8px auto; color: var(--accent-2); font-size: 13px; padding-left: 44px; }
+
+/* Nút hành động dưới câu trả lời (Sao chép) */
+.msg-actions { margin-top: 10px; display: flex; gap: 8px; }
+.act {
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  font-size: 12.5px; padding: 5px 10px; border-radius: 8px; cursor: pointer;
+}
+.act:hover { border-color: var(--accent); color: var(--ink); }
+
+/* Chip câu hỏi gợi ý */
+.chips {
+  max-width: 900px; margin: 4px auto 8px; padding-left: 44px;
+  display: flex; flex-wrap: wrap; gap: 10px;
+}
+.chip {
+  background: rgba(63, 111, 230, 0.12); border: 1px solid var(--border);
+  color: #cdd8f0; font-size: 13.5px; padding: 9px 14px; border-radius: 12px;
+  cursor: pointer; text-align: left; line-height: 1.4; transition: border-color .15s, background .15s;
+}
+.chip:hover { border-color: var(--accent-2); background: rgba(63, 111, 230, 0.2); }
+
+/* Dòng tin cậy dưới ô nhập */
+.trust {
+  max-width: 900px; margin: 8px auto 0; padding: 0 4px; text-align: center;
+  color: var(--muted2); font-size: 12px;
+}
 
 /* --- Composer --- */
 .composer { padding: 12px clamp(16px, 6vw, 90px) 20px; }
