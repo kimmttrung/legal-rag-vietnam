@@ -95,6 +95,13 @@ class Settings:
     DEMO_SNIPPET_CHARS = 400
 
     # =========================================================
+    # SUPABASE (đăng nhập Google + lưu lịch sử hội thoại)
+    # anon key là khóa CÔNG KHAI (an toàn nhúng frontend); frontend lấy qua endpoint /config.
+    # =========================================================
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+    SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+
+    # =========================================================
     # SELF-VERIFICATION RULES
     # =========================================================
     MIN_ARTICLE_REFS = 1      # Bắt buộc câu trả lời phải có ít nhất 1 tham chiếu Điều X

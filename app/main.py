@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from config.settings import Settings
 from app.service import RagService
 from src.api_answer_generator import clean_answer
 
@@ -68,6 +69,15 @@ def _sse(event: str, data) -> str:
 @app.get("/health")
 def health():
     return {"status": "ok", "ready": _service is not None}
+
+
+@app.get("/config")
+def config():
+    """Cấu hình công khai cho frontend (Supabase URL + anon key). Không chứa bí mật server."""
+    return {
+        "supabaseUrl": Settings.SUPABASE_URL,
+        "supabaseAnonKey": Settings.SUPABASE_ANON_KEY,
+    }
 
 
 @app.post("/ask")
