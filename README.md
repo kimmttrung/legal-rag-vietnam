@@ -1,3 +1,13 @@
+---
+title: NextGen Legal RAG
+emoji: ⚖️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Legal-RAG-Vietnam — Hệ thống Hỏi-Đáp Pháp lý Tiếng Việt (NEXTGEN)
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** trả lời câu hỏi pháp luật Việt Nam
